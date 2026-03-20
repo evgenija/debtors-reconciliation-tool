@@ -1,5 +1,10 @@
 import os
+import sys
 import traceback
+
+# Додаємо корінь проєкту в Python path,
+# щоб у Streamlit Cloud коректно працювали імпорти з src
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import streamlit as st
 
@@ -47,13 +52,13 @@ def build_summary(df):
 
 
 def highlight_status(val):
-    if val == "OK":
+    if val == "Все оплачено":
         return "background-color: #d4edda"
-    if val == "PARTIAL":
+    if val == "Частково оплачено":
         return "background-color: #fff3cd"
-    if val == "NOT_PAID":
+    if val == "Не оплачено":
         return "background-color: #f8d7da"
-    if val == "OVERPAID":
+    if val == "Переплата":
         return "background-color: #d1ecf1"
     return ""
 
@@ -114,12 +119,12 @@ try:
     summary = build_summary(reconciled_df)
 
     st.markdown("## 📊 Підсумок")
-    c1, c2, c3, c4, c5 = st.columns(5)
-    c1.metric("Клієнтів", summary["rows"])
-    c2.metric("✔ Все оплачено", summary["ok"])
-    c3.metric("⚠ Частково", summary["partial"])
-    c4.metric("❌ Не оплачено", summary["not_paid"])
-    c5.metric("💰 Переплата", summary["overpaid"])
+    s1, s2, s3, s4, s5 = st.columns(5)
+    s1.metric("Клієнтів", summary["rows"])
+    s2.metric("✔ Все оплачено", summary["ok"])
+    s3.metric("⚠ Частково", summary["partial"])
+    s4.metric("❌ Не оплачено", summary["not_paid"])
+    s5.metric("💰 Переплата", summary["overpaid"])
 
     st.markdown("## 📋 Результат звірки")
 
@@ -160,34 +165,37 @@ try:
     styled_df = display_df.style.map(highlight_status, subset=["Статус"])
     st.dataframe(styled_df, use_container_width=True, height=500)
 
-    col_a, col_b = st.columns([1, 1])
+    col_download, col_clear = st.columns([1, 1])
 
-    with col_a:
+    with col_download:
         excel_bytes = dataframe_to_excel_bytes(display_df)
         st.download_button(
             label="⬇️ Скачати результат у Excel",
             data=excel_bytes,
             file_name="reconciliation_result.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True,
         )
 
-    with col_b:
+    with col_clear:
         st.button("🗑 Очистити форму", on_click=clear_form, use_container_width=True)
 
     if show_debug:
         st.markdown("## 🧪 Технічний preview")
+
         st.markdown("### Parsed")
         st.dataframe(parsed_df.head(100), use_container_width=True)
+
         st.markdown("### Raw")
         st.dataframe(raw_df.head(50), use_container_width=True)
 
 except ValueError as e:
     st.error(str(e))
-    st.button("🗑 Очистити форму", on_click=clear_form)
+    st.button("🗑 Очистити форму", on_click=clear_form, use_container_width=True)
 
 except Exception:
     st.error("❌ Помилка обробки файлу. Перевірте, що це коректний Excel-файл з 1С.")
-    st.button("🗑 Очистити форму", on_click=clear_form)
+    st.button("🗑 Очистити форму", on_click=clear_form, use_container_width=True)
 
     if show_debug:
         st.code(traceback.format_exc())
