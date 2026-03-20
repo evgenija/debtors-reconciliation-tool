@@ -1,9 +1,9 @@
 import os
 import sys
 import traceback
+import re
 
-# Додаємо корінь проєкту в Python path,
-# щоб у Streamlit Cloud коректно працювали імпорти з src
+# FIX для Streamlit Cloud (щоб бачив src)
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import streamlit as st
@@ -18,11 +18,25 @@ from src.exporter import dataframe_to_excel_bytes
 st.set_page_config(page_title="Звірка дебіторської заборгованості", layout="wide")
 
 
-def validate_uploaded_filename(filename: str) -> None:
+# ---------------------------
+# ВАЛІДАЦІЯ ФАЙЛУ
+# ---------------------------
+def validate_uploaded_file(filename: str) -> None:
     if not filename.lower().endswith(".xlsx"):
         raise ValueError("❌ Будь ласка, завантажте файл у форматі Excel (.xlsx)")
 
+    name_without_ext = filename.replace(".xlsx", "")
 
+    # тільки одне слово (прізвище)
+    if not re.match(r"^[А-Яа-яІіЇїЄєA-Za-z]+$", name_without_ext):
+        raise ValueError(
+            "❌ Назва файлу має бути у форматі: Прізвище.xlsx (наприклад: Ткаченко.xlsx)"
+        )
+
+
+# ---------------------------
+# PIPELINE
+# ---------------------------
 def run_pipeline(temp_path: str, original_filename: str):
     sales_manager = extract_sales_manager_from_filename(original_filename)
 
@@ -40,6 +54,9 @@ def run_pipeline(temp_path: str, original_filename: str):
     return raw_df, parsed_df, reconciled_df
 
 
+# ---------------------------
+# SUMMARY
+# ---------------------------
 def build_summary(df):
     status_counts = df["status"].value_counts().to_dict()
     return {
@@ -51,6 +68,9 @@ def build_summary(df):
     }
 
 
+# ---------------------------
+# STYLE
+# ---------------------------
 def highlight_status(val):
     if val == "Все оплачено":
         return "background-color: #d4edda"
@@ -63,6 +83,9 @@ def highlight_status(val):
     return ""
 
 
+# ---------------------------
+# CLEAR FORM
+# ---------------------------
 if "uploader_key" not in st.session_state:
     st.session_state.uploader_key = 0
 
@@ -72,13 +95,26 @@ def clear_form():
     st.rerun()
 
 
+# ---------------------------
+# UI
+# ---------------------------
 st.title("🔍 Звірка дебіторської заборгованості")
+
 st.markdown(
     """
-Завантажте Excel-звіт з 1С — система автоматично:
-- порахує суми реалізацій, оплат та повернень
-- визначить статус по кожному клієнту
-- покаже розбіжності
+Завантажте Excel-звіт з 1С. Перед завантаженням:
+
+1. Вивантажте звіт з 1С  
+2. Відкрийте файл в Excel  
+3. Перезбережіть файл у форматі **.xlsx**  
+4. Назвіть файл у форматі: **Прізвище.xlsx** (наприклад: `Ткаченко.xlsx`)
+
+---
+
+Після завантаження система автоматично:
+- порахує суми реалізацій, оплат та повернень  
+- визначить статус по кожному клієнту  
+- покаже розбіжності  
 
 Після цього ви зможете **переглянути результат або скачати Excel**.
 """
@@ -98,12 +134,16 @@ uploaded_file = st.file_uploader(
 
 show_debug = st.checkbox("Показати технічну інформацію", value=False)
 
+
+# ---------------------------
+# MAIN FLOW
+# ---------------------------
 if uploaded_file is None:
-    st.warning("⬆️ Завантажте Excel-файл, щоб автоматично перевірити дебіторську заборгованість")
+    st.warning("⬆️ Завантажте файл у форматі Прізвище.xlsx")
     st.stop()
 
 try:
-    validate_uploaded_filename(uploaded_file.name)
+    validate_uploaded_file(uploaded_file.name)
 
     os.makedirs("data/raw", exist_ok=True)
     temp_path = os.path.join("data/raw", uploaded_file.name)
@@ -154,18 +194,12 @@ try:
     }
     display_df["Статус"] = display_df["Статус"].map(status_map).fillna(display_df["Статус"])
 
-    display_df["Сума реалізації"] = display_df["Сума реалізації"].round(2)
-    display_df["Оплати"] = display_df["Оплати"].round(2)
-    display_df["Повернення"] = display_df["Повернення"].round(2)
-    display_df["Очікувана сума"] = display_df["Очікувана сума"].round(2)
-    display_df["Сальдо"] = display_df["Сальдо"].round(2)
-
     display_df = display_df.sort_values(by="Сальдо", ascending=False)
 
     styled_df = display_df.style.map(highlight_status, subset=["Статус"])
     st.dataframe(styled_df, use_container_width=True, height=500)
 
-    col_download, col_clear = st.columns([1, 1])
+    col_download, col_clear = st.columns(2)
 
     with col_download:
         excel_bytes = dataframe_to_excel_bytes(display_df)
@@ -182,19 +216,15 @@ try:
 
     if show_debug:
         st.markdown("## 🧪 Технічний preview")
-
-        st.markdown("### Parsed")
-        st.dataframe(parsed_df.head(100), use_container_width=True)
-
-        st.markdown("### Raw")
-        st.dataframe(raw_df.head(50), use_container_width=True)
+        st.dataframe(parsed_df.head(100))
+        st.dataframe(raw_df.head(50))
 
 except ValueError as e:
     st.error(str(e))
     st.button("🗑 Очистити форму", on_click=clear_form, use_container_width=True)
 
 except Exception:
-    st.error("❌ Помилка обробки файлу. Перевірте, що це коректний Excel-файл з 1С.")
+    st.error("❌ Помилка обробки файлу. Перевірте формат Excel.")
     st.button("🗑 Очистити форму", on_click=clear_form, use_container_width=True)
 
     if show_debug:
