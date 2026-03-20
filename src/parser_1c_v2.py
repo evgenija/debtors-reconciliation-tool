@@ -132,7 +132,7 @@ def build_record(
     }
 
 
-def parse_1c_report(df: pd.DataFrame, sales_manager: str) -> pd.DataFrame:
+def parse_1c_report_v2(df: pd.DataFrame, sales_manager: str) -> pd.DataFrame:
     records: List[Dict[str, Any]] = []
 
     started = False
@@ -165,9 +165,6 @@ def parse_1c_report(df: pd.DataFrame, sales_manager: str) -> pd.DataFrame:
         if is_garbage_row(label):
             continue
 
-        if "закрито" in label.lower():
-            continue
-
         if is_document_row(label):
             records.append(
                 build_record(
@@ -196,6 +193,7 @@ def parse_1c_report(df: pd.DataFrame, sales_manager: str) -> pd.DataFrame:
             last_significant_type = "internal_entity"
             continue
 
+        # Якщо рядок схожий на юрособу замовника — запам'ятовуємо її
         if looks_like_customer_legal_entity(label) and not is_internal_entity(label):
             current_customer_legal_entity = clean_customer_legal_entity(label)
             current_trade_point_or_store = None
@@ -204,6 +202,8 @@ def parse_1c_report(df: pd.DataFrame, sales_manager: str) -> pd.DataFrame:
             last_significant_type = "customer_legal_entity"
             continue
 
+        # Усі інші значущі рядки — це ТТ / назва магазину.
+        # Якщо вони йдуть після документів/внутрішньої юрособи/форми, це новий блок.
         if last_significant_type in {"document", "internal_entity", "payment_form"}:
             current_internal_entity = None
             current_payment_form = None
