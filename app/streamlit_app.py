@@ -1,9 +1,7 @@
 import os
 import re
 import sys
-import traceback
 
-# Додаємо корінь проєкту в path, щоб Streamlit Cloud бачив src
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import pandas as pd
@@ -166,11 +164,21 @@ try:
 
     sales = extract_sales_manager_from_filename(uploaded.name)
 
-    raw = load_excel(path)
-    parsed = parse_1c_report(raw, sales)
-    df = reconcile(parsed)
+    try:
+        raw = load_excel(path)
+    except Exception:
+        st.error("❌ Файл пошкоджений або має неправильний формат.")
+        st.info("👉 Відкрийте файл в Excel і перезбережіть як .xlsx, після чого завантажте повторно.")
+        st.stop()
 
-    df = format_df(df)
+    try:
+        parsed = parse_1c_report(raw, sales)
+        df = reconcile(parsed)
+        df = format_df(df)
+    except Exception:
+        st.error("❌ Не вдалося обробити файл.")
+        st.info("👉 Перевірте, чи файл відповідає очікуваній структурі звіту 1С, і спробуйте ще раз.")
+        st.stop()
 
     if "Днів прострочки" in df.columns:
         df = df.sort_values(by="Днів прострочки", ascending=False, na_position="last")
@@ -226,6 +234,9 @@ try:
     with col2:
         st.button("🗑 Очистити форму", on_click=clear_form, use_container_width=True)
 
+except ValueError as e:
+    st.error(str(e))
+
 except Exception:
-    st.error("❌ Помилка обробки файлу")
-    st.code(traceback.format_exc())
+    st.error("❌ Сталася непередбачена помилка.")
+    st.info("👉 Оновіть сторінку та спробуйте ще раз. Якщо проблема повториться — перевірте файл або зверніться до адміністратора.")
